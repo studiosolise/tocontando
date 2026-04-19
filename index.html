@@ -3315,11 +3315,13 @@ function renderInvestimentos(){
 // FIREBASE — LOGIN E INIT
 // ════════════════════════════════════════════════════════════════
 
-// Lista de usuários válidos → usuário:pin
+// Usuários padrão (fallback se Firebase indisponível)
 const SENHAS_VALIDAS = {
   'solise': '1802',
-  'teste':  '0000',
 };
+
+// PIN do painel administrativo — altere para algo secreto
+const ADMIN_PIN = '1802';
 
 // ── PIN STATE ──
 let _pin = '';
@@ -3344,25 +3346,151 @@ function _tryAutoLogin(){
   setTimeout(()=>{ fbLogin(); }, 180);
 }
 
-function fbLogin(){
+async function fbLogin(){
   const user = (document.getElementById('tc-user-input')?.value||'').trim().toLowerCase();
   const errEl = document.getElementById('fb-login-error');
   if(!user){ errEl.textContent='Digite seu usuário.'; return; }
   if(_pin.length < 4){ errEl.textContent='Digite os 4 dígitos do PIN.'; return; }
-  const pinCorreto = SENHAS_VALIDAS[user];
+
+  errEl.textContent = '';
+  const btn = document.getElementById('tc-login-btn');
+  if(btn) btn.disabled = true;
+
+  let pinCorreto = null;
+  try {
+    const snap = await db.ref('_admin/users/' + user).once('value');
+    const userData = snap.val();
+    if(userData && userData.ativo !== false){
+      pinCorreto = userData.pin;
+    } else if(!userData){
+      pinCorreto = SENHAS_VALIDAS[user] || null;
+    }
+  } catch(e){
+    pinCorreto = SENHAS_VALIDAS[user] || null;
+  }
+  if(btn) btn.disabled = false;
+
   if(!pinCorreto || pinCorreto !== _pin){
     errEl.textContent='Usuário ou PIN incorreto.';
     _pin=''; _updatePinDots();
     return;
   }
   errEl.textContent='';
-  // Salva usuário para pré-preencher no próximo acesso
   localStorage.setItem('tc_last_user', user);
   window._CURRENT_USER = user;
   window._CURRENT_PIN  = _pin;
   const ov = document.getElementById('fb-login-overlay');
-  ov.remove(); // Remove completamente do DOM — elimina qualquer interferência de z-index
+  ov.remove();
   fbIniciarApp(user + _pin);
+}
+
+// ── PAINEL ADMIN ─────────────────────────────────────────────────
+let _adminPinState = '';
+
+function abrirAdminPIN(){
+  _adminPinState = '';
+  _updateAdminPinDots();
+  document.getElementById('admin-pin-error').textContent = '';
+  document.getElementById('admin-pin-dlg').showModal();
+}
+function fecharAdminPIN(){
+  _adminPinState = '';
+  document.getElementById('admin-pin-dlg').close();
+}
+function adminPinPress(d){
+  if(_adminPinState.length >= 4) return;
+  _adminPinState += d;
+  _updateAdminPinDots();
+  if(_adminPinState.length === 4) setTimeout(_verificarAdminPin, 180);
+}
+function adminPinDel(){
+  _adminPinState = _adminPinState.slice(0,-1);
+  _updateAdminPinDots();
+  document.getElementById('admin-pin-error').textContent = '';
+}
+function _updateAdminPinDots(){
+  for(let i=0;i<4;i++){
+    const d = document.getElementById('adot-'+i);
+    if(d) d.style.background = i < _adminPinState.length ? 'var(--tc-brand)' : 'var(--border2)';
+  }
+}
+function _verificarAdminPin(){
+  if(_adminPinState !== ADMIN_PIN){
+    document.getElementById('admin-pin-error').textContent = 'PIN incorreto.';
+    _adminPinState = ''; _updateAdminPinDots();
+    return;
+  }
+  fecharAdminPIN();
+  _abrirAdminPanel();
+}
+async function _abrirAdminPanel(){
+  document.getElementById('admin-panel').showModal();
+  await _carregarListaUsuarios();
+}
+function fecharAdmin(){
+  document.getElementById('admin-panel').close();
+}
+async function _carregarListaUsuarios(){
+  const list = document.getElementById('admin-user-list');
+  list.innerHTML = '<div style="color:var(--muted);font-size:.8rem;text-align:center;padding:16px 0;">Carregando...</div>';
+
+  const snap = await db.ref('_admin/users').once('value');
+  let users = snap.val() || {};
+
+  if(Object.keys(users).length === 0){
+    const seed = Object.fromEntries(
+      Object.entries(SENHAS_VALIDAS).map(([k,v]) => [k,{pin:v,ativo:true,criadoEm:Date.now()}])
+    );
+    await db.ref('_admin/users').set(seed);
+    users = seed;
+  }
+
+  list.innerHTML = '';
+  const entries = Object.entries(users).sort((a,b) => a[0].localeCompare(b[0]));
+
+  if(!entries.length){
+    list.innerHTML = '<div style="color:var(--muted);font-size:.8rem;text-align:center;padding:16px;">Nenhum usuário cadastrado.</div>';
+    return;
+  }
+
+  for(const [uname, data] of entries){
+    const ativo = data.ativo !== false;
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;gap:8px;';
+    row.innerHTML = `
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:600;font-size:.9rem;color:${ativo?'var(--text)':'var(--muted)'};font-family:'Plus Jakarta Sans',sans-serif;">${uname}</div>
+        <div style="font-size:.72rem;color:var(--muted);margin-top:2px;">PIN: ${data.pin} &nbsp;·&nbsp; ${ativo?'<span style="color:var(--success)">Ativo</span>':'<span style="color:var(--danger)">Inativo</span>'}</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0;">
+        <button onclick="adminToggleUser('${uname}',${!ativo})" style="all:unset;background:var(--surface2);border:1px solid var(--border2);color:var(--muted);border-radius:8px;padding:6px 10px;font-size:.75rem;cursor:pointer;touch-action:manipulation;box-sizing:border-box;">${ativo?'Pausar':'Ativar'}</button>
+        <button onclick="adminRemoveUser('${uname}')" style="all:unset;background:rgba(238,83,80,.1);border:1px solid rgba(238,83,80,.2);color:var(--danger);border-radius:8px;padding:6px 10px;font-size:.75rem;cursor:pointer;touch-action:manipulation;box-sizing:border-box;">Remover</button>
+      </div>`;
+    list.appendChild(row);
+  }
+}
+async function adminAddUser(){
+  const userIn = document.getElementById('admin-new-user');
+  const pinIn  = document.getElementById('admin-new-pin');
+  const errEl  = document.getElementById('admin-add-error');
+  const uname  = userIn.value.trim().toLowerCase();
+  const pin    = pinIn.value.trim();
+  if(!uname){ errEl.textContent='Digite um nome de usuário.'; return; }
+  if(!/^\d{4}$/.test(pin)){ errEl.textContent='PIN deve ter exatamente 4 dígitos numéricos.'; return; }
+  errEl.textContent='Salvando...';
+  await db.ref('_admin/users/' + uname).set({pin, ativo:true, criadoEm:Date.now()});
+  userIn.value=''; pinIn.value='';
+  errEl.textContent='';
+  _carregarListaUsuarios();
+}
+async function adminToggleUser(uname, novoStatus){
+  await db.ref('_admin/users/'+uname+'/ativo').set(novoStatus);
+  _carregarListaUsuarios();
+}
+async function adminRemoveUser(uname){
+  if(!confirm('Remover o usuário "'+uname+'"?\n\nOs dados financeiros dele continuarão salvos no Firebase.')) return;
+  await db.ref('_admin/users/'+uname).remove();
+  _carregarListaUsuarios();
 }
 
 // Pré-preenche o campo de usuário se já logou antes
@@ -3414,14 +3542,12 @@ function _updateZerarDots(){
   }
 }
 function confirmarZerar(){
-  const user = window._CURRENT_USER || localStorage.getItem('tc_last_user') || '';
-  const pinCorreto = SENHAS_VALIDAS[user];
+  const pinCorreto = window._CURRENT_PIN || '';
   if(!pinCorreto || pinCorreto !== _zerarPin){
     document.getElementById('zerar-pin-error').textContent = 'PIN incorreto.';
     _zerarPin = ''; _updateZerarDots();
     return;
   }
-  // PIN correto — apagar tudo
   fecharModalZerar2();
   zerarTudo();
 }
@@ -4011,6 +4137,58 @@ function importarJSON(input){
 }
 
 </script>
+<!-- ══ ADMIN PIN DIALOG ══════════════════════════════════════════ -->
+<dialog id="admin-pin-dlg" style="max-width:min(320px,92vw);width:100%;border-radius:20px;border:1px solid var(--border);background:var(--surface);padding:28px 24px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+    <span style="font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:1rem;color:var(--text);">Área Admin</span>
+    <button onclick="fecharAdminPIN()" style="all:unset;cursor:pointer;color:var(--muted);font-size:1.1rem;padding:4px 8px;touch-action:manipulation;">✕</button>
+  </div>
+  <div style="font-size:.78rem;color:var(--muted);margin-bottom:20px;">Digite o PIN de administrador</div>
+  <div style="display:flex;gap:12px;justify-content:center;margin-bottom:16px;">
+    <div id="adot-0" style="width:13px;height:13px;border-radius:50%;background:var(--border2);transition:background .2s;"></div>
+    <div id="adot-1" style="width:13px;height:13px;border-radius:50%;background:var(--border2);transition:background .2s;"></div>
+    <div id="adot-2" style="width:13px;height:13px;border-radius:50%;background:var(--border2);transition:background .2s;"></div>
+    <div id="adot-3" style="width:13px;height:13px;border-radius:50%;background:var(--border2);transition:background .2s;"></div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;">
+    <button type="button" onclick="adminPinPress('1')" style="all:unset;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:14px;font-size:1.1rem;font-weight:700;cursor:pointer;text-align:center;touch-action:manipulation;box-sizing:border-box;">1</button>
+    <button type="button" onclick="adminPinPress('2')" style="all:unset;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:14px;font-size:1.1rem;font-weight:700;cursor:pointer;text-align:center;touch-action:manipulation;box-sizing:border-box;">2</button>
+    <button type="button" onclick="adminPinPress('3')" style="all:unset;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:14px;font-size:1.1rem;font-weight:700;cursor:pointer;text-align:center;touch-action:manipulation;box-sizing:border-box;">3</button>
+    <button type="button" onclick="adminPinPress('4')" style="all:unset;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:14px;font-size:1.1rem;font-weight:700;cursor:pointer;text-align:center;touch-action:manipulation;box-sizing:border-box;">4</button>
+    <button type="button" onclick="adminPinPress('5')" style="all:unset;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:14px;font-size:1.1rem;font-weight:700;cursor:pointer;text-align:center;touch-action:manipulation;box-sizing:border-box;">5</button>
+    <button type="button" onclick="adminPinPress('6')" style="all:unset;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:14px;font-size:1.1rem;font-weight:700;cursor:pointer;text-align:center;touch-action:manipulation;box-sizing:border-box;">6</button>
+    <button type="button" onclick="adminPinPress('7')" style="all:unset;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:14px;font-size:1.1rem;font-weight:700;cursor:pointer;text-align:center;touch-action:manipulation;box-sizing:border-box;">7</button>
+    <button type="button" onclick="adminPinPress('8')" style="all:unset;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:14px;font-size:1.1rem;font-weight:700;cursor:pointer;text-align:center;touch-action:manipulation;box-sizing:border-box;">8</button>
+    <button type="button" onclick="adminPinPress('9')" style="all:unset;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:14px;font-size:1.1rem;font-weight:700;cursor:pointer;text-align:center;touch-action:manipulation;box-sizing:border-box;">9</button>
+    <button type="button" onclick="adminPinPress('0')" style="all:unset;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:14px;font-size:1.1rem;font-weight:700;cursor:pointer;text-align:center;touch-action:manipulation;box-sizing:border-box;grid-column:2;">0</button>
+    <button type="button" onclick="adminPinDel()" style="all:unset;background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:10px;padding:14px;font-size:.9rem;cursor:pointer;text-align:center;touch-action:manipulation;box-sizing:border-box;">⌫</button>
+  </div>
+  <div id="admin-pin-error" style="font-size:.72rem;color:var(--danger);text-align:center;min-height:16px;"></div>
+</dialog>
+
+<!-- ══ ADMIN PANEL DIALOG ════════════════════════════════════════ -->
+<dialog id="admin-panel" style="max-width:min(500px,95vw);width:100%;border-radius:20px;border:1px solid var(--border);background:var(--bg);padding:0;overflow:hidden;">
+  <div style="padding:24px 24px 0;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <span style="font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:1.1rem;color:var(--text);">Gerenciar Usuários</span>
+      <button onclick="fecharAdmin()" style="all:unset;cursor:pointer;color:var(--muted);font-size:1.1rem;padding:4px 8px;touch-action:manipulation;">✕</button>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:20px;">
+      <div style="font-size:.7rem;font-weight:600;color:var(--muted);margin-bottom:12px;text-transform:uppercase;letter-spacing:.06em;">Novo Usuário</div>
+      <div style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap;">
+        <input id="admin-new-user" type="text" placeholder="usuário (sem espaços)" autocapitalize="none" autocorrect="off" spellcheck="false"
+          style="flex:1;min-width:120px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);border-radius:8px;padding:10px 12px;font-size:.9rem;font-family:'Plus Jakarta Sans',sans-serif;outline:none;box-sizing:border-box;">
+        <input id="admin-new-pin" type="text" placeholder="PIN" maxlength="4" pattern="[0-9]*" inputmode="numeric"
+          style="width:72px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);border-radius:8px;padding:10px 12px;font-size:.9rem;font-family:'Plus Jakarta Sans',sans-serif;text-align:center;outline:none;box-sizing:border-box;letter-spacing:.2em;">
+        <button onclick="adminAddUser()" style="all:unset;background:var(--tc-brand);color:#0a0f0e;border-radius:8px;padding:10px 16px;font-size:.85rem;font-weight:700;cursor:pointer;white-space:nowrap;touch-action:manipulation;box-sizing:border-box;">+ Criar</button>
+      </div>
+      <div id="admin-add-error" style="font-size:.72rem;color:var(--danger);margin-top:8px;min-height:14px;"></div>
+    </div>
+    <div style="font-size:.7rem;font-weight:600;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:.06em;">Usuários cadastrados</div>
+  </div>
+  <div id="admin-user-list" style="padding:0 24px 24px;max-height:340px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;"></div>
+</dialog>
+
 <!-- ══ LOGIN OVERLAY — último elemento do DOM ═══════════════════ -->
 <div id="fb-login-overlay" style="position:fixed;inset:0;z-index:9999;background:var(--bg);display:flex;align-items:center;justify-content:center;overflow-y:auto;">
   <div style="width:100%;max-width:360px;padding:24px;margin:auto;">
