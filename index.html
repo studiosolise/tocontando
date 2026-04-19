@@ -3642,6 +3642,16 @@ async function confirmarTrocarPin(){
   }
 }
 
+function _limparLocalStorageUsuario(){
+  // Remove todos os dados de planilha do localStorage para não vazar entre usuários
+  MESES.forEach(m=>{
+    localStorage.removeItem(keyMes(m.key));
+    localStorage.removeItem(keySnap(m.key));
+  });
+  localStorage.removeItem(GLOBAL_CONFIG_KEY);
+  localStorage.removeItem('cg_data_version');
+}
+
 function fbIniciarApp(chave){
   // Sobrescreve o DB_ROOT com a chave correta
   window._FB_ROOT = 'usuarios/' + chave;
@@ -3650,20 +3660,15 @@ function fbIniciarApp(chave){
   const uEl = document.getElementById('header-username');
   if(uEl && window._CURRENT_USER) uEl.textContent = '👤 ' + window._CURRENT_USER;
 
-  // Versão dos dados
-  const DATA_VERSION = 'v4';
-  if(localStorage.getItem('cg_data_version') !== DATA_VERSION){
-    const snapMar = localStorage.getItem('cg_snap_mar');
-    if(!snapMar) localStorage.removeItem('cg_mes_mar');
-    localStorage.setItem('cg_data_version', DATA_VERSION);
-  }
+  // Limpa dados do usuário anterior antes de carregar os do usuário atual
+  _limparLocalStorageUsuario();
 
   // Sincroniza config global do Firebase → localStorage, depois inicia
   db.ref(window._FB_ROOT + '/config_global').once('value').then(snap=>{
     const cfg = snap.val();
     if(cfg){
       try{ localStorage.setItem(GLOBAL_CONFIG_KEY, JSON.stringify(cfg)); }catch(e){}
-    } else if(!localStorage.getItem(GLOBAL_CONFIG_KEY)){
+    } else {
       saveGlobalConfig({
         fontes:  JSON.parse(JSON.stringify(DEFAULT_FONTES)),
         cats:    [...DEFAULT_CATS],
@@ -3692,17 +3697,15 @@ function fbIniciarApp(chave){
       });
     });
   }).catch(()=>{
-    // Sem conexão — usa localStorage
-    if(!localStorage.getItem(GLOBAL_CONFIG_KEY)){
-      saveGlobalConfig({
-        fontes:  JSON.parse(JSON.stringify(DEFAULT_FONTES)),
-        cats:    [...DEFAULT_CATS],
-        origens: JSON.parse(JSON.stringify(DEFAULT_ORIGENS)),
-      });
-    }
+    // Sem conexão — inicia com planilha vazia
+    saveGlobalConfig({
+      fontes:  JSON.parse(JSON.stringify(DEFAULT_FONTES)),
+      cats:    [...DEFAULT_CATS],
+      origens: JSON.parse(JSON.stringify(DEFAULT_ORIGENS)),
+    });
     renderCapa();
     bindEventos();
-    showSyncStatus('⚠ Sem conexão — dados locais', true);
+    showSyncStatus('⚠ Sem conexão — dados não carregados', true);
   });
 }
 
