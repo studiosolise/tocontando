@@ -613,7 +613,14 @@ dialog p{font-size:.82rem;color:var(--muted);line-height:1.6;margin-bottom:18px;
         <div class="capa-header-sub">Controle de Gastos · <em style="color:var(--tc-brand);font-style:normal;">2026</em></div>
       </div>
     </div>
-    <div class="capa-year-badge" id="capa-year">2026</div>
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:10px;">
+      <div class="capa-year-badge" id="capa-year">2026</div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span id="header-username" style="font-size:.72rem;color:var(--muted);font-family:'Plus Jakarta Sans',sans-serif;"></span>
+        <button onclick="abrirTrocarPin()" style="all:unset;font-size:.72rem;color:var(--muted);border:1px solid var(--border);border-radius:8px;padding:5px 11px;cursor:pointer;touch-action:manipulation;font-family:'Plus Jakarta Sans',sans-serif;transition:border-color .15s;" onmouseover="this.style.borderColor='var(--tc-brand)'" onmouseout="this.style.borderColor='var(--border)'">Trocar PIN</button>
+        <button onclick="logout()" style="all:unset;font-size:.72rem;color:var(--danger);border:1px solid rgba(238,83,80,.3);border-radius:8px;padding:5px 11px;cursor:pointer;touch-action:manipulation;font-family:'Plus Jakarta Sans',sans-serif;transition:border-color .15s;" onmouseover="this.style.borderColor='var(--danger)'" onmouseout="this.style.borderColor='rgba(238,83,80,.3)'">Sair</button>
+      </div>
+    </div>
   </div>
 
   <!-- BALANÇO ANUAL -->
@@ -3574,9 +3581,70 @@ function zerarTudo(){
   showSavedMsg('✓ Planilha zerada com sucesso');
 }
 
+function logout(){
+  window._CURRENT_USER = null;
+  window._CURRENT_PIN  = null;
+  window._FB_ROOT      = null;
+  localStorage.removeItem('tc_last_user');
+  location.reload();
+}
+
+// ── TROCAR PIN ───────────────────────────────────────────────────
+function abrirTrocarPin(){
+  document.getElementById('tp-pin-atual').value  = '';
+  document.getElementById('tp-pin-novo').value   = '';
+  document.getElementById('tp-pin-conf').value   = '';
+  document.getElementById('tp-msg').textContent  = '';
+  document.getElementById('tp-msg').className    = '';
+  document.getElementById('modal-trocar-pin').showModal();
+}
+function fecharTrocarPin(){
+  document.getElementById('modal-trocar-pin').close();
+}
+async function confirmarTrocarPin(){
+  const pinAtual = document.getElementById('tp-pin-atual').value.trim();
+  const pinNovo  = document.getElementById('tp-pin-novo').value.trim();
+  const pinConf  = document.getElementById('tp-pin-conf').value.trim();
+  const msgEl    = document.getElementById('tp-msg');
+
+  const erro = (t) => { msgEl.textContent = t; msgEl.className = 'tp-error'; };
+  const ok   = (t) => { msgEl.textContent = t; msgEl.className = 'tp-success'; };
+
+  if(pinAtual !== window._CURRENT_PIN){ erro('PIN atual incorreto.'); return; }
+  if(!/^\d{4}$/.test(pinNovo)){ erro('Novo PIN deve ter 4 dígitos numéricos.'); return; }
+  if(pinNovo !== pinConf){ erro('Os PINs não coincidem.'); return; }
+  if(pinNovo === pinAtual){ erro('O novo PIN deve ser diferente do atual.'); return; }
+
+  msgEl.textContent = 'Salvando...'; msgEl.className = 'tp-loading';
+  const user    = window._CURRENT_USER;
+  const oldPath = 'usuarios/' + user + pinAtual;
+  const newPath = 'usuarios/' + user + pinNovo;
+
+  try {
+    const snap = await db.ref(oldPath).once('value');
+    const data = snap.val();
+    if(data) await db.ref(newPath).set(data);
+    await db.ref(oldPath).remove();
+    await db.ref('_admin/users/' + user + '/pin').set(pinNovo);
+
+    window._CURRENT_PIN = pinNovo;
+    window._FB_ROOT     = newPath;
+
+    ok('✓ PIN alterado com sucesso!');
+    setTimeout(() => fecharTrocarPin(), 1800);
+  } catch(e){
+    erro('Erro ao salvar. Tente novamente.');
+    console.error(e);
+  }
+}
+
 function fbIniciarApp(chave){
   // Sobrescreve o DB_ROOT com a chave correta
   window._FB_ROOT = 'usuarios/' + chave;
+
+  // Exibe nome do usuário no header
+  const uEl = document.getElementById('header-username');
+  if(uEl && window._CURRENT_USER) uEl.textContent = '👤 ' + window._CURRENT_USER;
 
   // Versão dos dados
   const DATA_VERSION = 'v4';
@@ -4137,6 +4205,33 @@ function importarJSON(input){
 }
 
 </script>
+<!-- ══ TROCAR PIN DIALOG ═════════════════════════════════════════ -->
+<dialog id="modal-trocar-pin" style="max-width:min(360px,92vw);width:100%;border-radius:20px;border:1px solid var(--border);background:var(--surface);padding:28px 24px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+    <span style="font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:1rem;color:var(--text);">Trocar PIN</span>
+    <button onclick="fecharTrocarPin()" style="all:unset;cursor:pointer;color:var(--muted);font-size:1.1rem;padding:4px 8px;touch-action:manipulation;">✕</button>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px;">
+    <input id="tp-pin-atual" type="password" inputmode="numeric" maxlength="4" placeholder="PIN atual"
+      style="background:var(--surface2);border:1px solid var(--border2);color:var(--text);border-radius:10px;padding:11px 14px;font-size:1rem;font-family:'Plus Jakarta Sans',sans-serif;outline:none;text-align:center;letter-spacing:.25em;width:100%;box-sizing:border-box;"
+      onfocus="this.style.borderColor='var(--tc-brand)'" onblur="this.style.borderColor='var(--border2)'">
+    <input id="tp-pin-novo" type="password" inputmode="numeric" maxlength="4" placeholder="Novo PIN"
+      style="background:var(--surface2);border:1px solid var(--border2);color:var(--text);border-radius:10px;padding:11px 14px;font-size:1rem;font-family:'Plus Jakarta Sans',sans-serif;outline:none;text-align:center;letter-spacing:.25em;width:100%;box-sizing:border-box;"
+      onfocus="this.style.borderColor='var(--tc-brand)'" onblur="this.style.borderColor='var(--border2)'">
+    <input id="tp-pin-conf" type="password" inputmode="numeric" maxlength="4" placeholder="Confirmar novo PIN"
+      style="background:var(--surface2);border:1px solid var(--border2);color:var(--text);border-radius:10px;padding:11px 14px;font-size:1rem;font-family:'Plus Jakarta Sans',sans-serif;outline:none;text-align:center;letter-spacing:.25em;width:100%;box-sizing:border-box;"
+      onfocus="this.style.borderColor='var(--tc-brand)'" onblur="this.style.borderColor='var(--border2)'"
+      onkeydown="if(event.key==='Enter') confirmarTrocarPin()">
+  </div>
+  <button onclick="confirmarTrocarPin()" style="all:unset;display:block;width:100%;background:var(--tc-brand);color:#0a0f0e;border-radius:10px;padding:13px;font-size:.92rem;font-weight:700;cursor:pointer;font-family:'Bricolage Grotesque',sans-serif;text-align:center;touch-action:manipulation;box-sizing:border-box;">Salvar novo PIN</button>
+  <div id="tp-msg" style="font-size:.75rem;text-align:center;margin-top:10px;min-height:18px;"></div>
+</dialog>
+<style>
+#tp-msg.tp-error   { color: var(--danger); }
+#tp-msg.tp-success { color: var(--success); }
+#tp-msg.tp-loading { color: var(--muted); }
+</style>
+
 <!-- ══ ADMIN PIN DIALOG ══════════════════════════════════════════ -->
 <dialog id="admin-pin-dlg" style="max-width:min(320px,92vw);width:100%;border-radius:20px;border:1px solid var(--border);background:var(--surface);padding:28px 24px;">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
