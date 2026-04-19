@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Admin — TôContando</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyDCb_alvqJUXb7YSBaiV5K_jylTmosTqxs",
+  authDomain: "controle-financeiro-e955c.firebaseapp.com",
+  databaseURL: "https://controle-financeiro-e955c-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "controle-financeiro-e955c",
+  storageBucket: "controle-financeiro-e955c.firebasestorage.app",
+  messagingSenderId: "402193682846",
+  appId: "1:402193682846:web:6d8d1017491867556cc68f"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+// ── ALTERE ESTE PIN PARA PROTEGER O PAINEL ADMIN ──
+const ADMIN_PIN = '1802';
+</script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:       #0e0f13;
+  --surface:  #16181f;
+  --surface2: #1c1e27;
+  --border:   #272a35;
+  --border2:  #2e3140;
+  --text:     #eceef3;
+  --muted:    #6b7280;
+  --muted2:   #4b5263;
+  --brand:    #0cb8a4;
+  --danger:   #ee5350;
+  --success:  #34d399;
+  --warn:     #f59e0b;
+}
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── PIN SCREEN ── */
+#pin-screen {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.pin-wrap {
+  width: 100%;
+  max-width: 340px;
+}
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: center;
+  margin-bottom: 36px;
+}
+.logo-mark {
+  width: 44px; height: 44px;
+  background: var(--brand);
+  border-radius: 14px 14px 14px 5px;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 16px rgba(12,184,164,.3);
+}
+.logo-mark svg { width: 22px; height: 22px; }
+.logo-name {
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-weight: 800; font-size: 1.5rem;
+  letter-spacing: -.03em;
+}
+.logo-name span { color: var(--brand); }
+
+.pin-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  padding: 28px 24px;
+  text-align: center;
+}
+.pin-card h2 {
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-weight: 700; font-size: 1.1rem;
+  margin-bottom: 4px;
+}
+.pin-card p {
+  font-size: .8rem; color: var(--muted);
+  margin-bottom: 24px;
+}
+.dots {
+  display: flex; gap: 12px;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+.dot {
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: var(--border2);
+  transition: background .18s, transform .15s;
+}
+.dot.filled { background: var(--brand); transform: scale(1.15); }
+.numpad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.key {
+  all: unset;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 12px;
+  padding: 16px;
+  font-size: 1.2rem;
+  font-weight: 700;
+  font-family: 'Bricolage Grotesque', sans-serif;
+  cursor: pointer;
+  text-align: center;
+  touch-action: manipulation;
+  transition: background .12s;
+}
+.key:hover { background: var(--border); }
+.key:active { transform: scale(.94); }
+.key.zero { grid-column: 2; }
+.key.del { font-size: .9rem; font-weight: 600; color: var(--muted); font-family: 'Plus Jakarta Sans', sans-serif; }
+.pin-error {
+  font-size: .75rem;
+  color: var(--danger);
+  text-align: center;
+  min-height: 18px;
+  margin-top: 4px;
+}
+
+/* ── ADMIN PANEL ── */
+#admin-screen {
+  display: none;
+  flex: 1;
+  flex-direction: column;
+}
+#admin-screen.visible { display: flex; }
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.topbar-logo {
+  display: flex; align-items: center; gap: 8px;
+}
+.topbar-logo .logo-mark { width: 34px; height: 34px; border-radius: 10px 10px 10px 4px; }
+.topbar-logo .logo-mark svg { width: 16px; height: 16px; }
+.topbar-name {
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-weight: 800; font-size: 1.1rem;
+  letter-spacing: -.02em;
+}
+.topbar-name span { color: var(--brand); }
+.badge {
+  background: rgba(12,184,164,.12);
+  color: var(--brand);
+  border: 1px solid rgba(12,184,164,.25);
+  border-radius: 20px;
+  padding: 4px 10px;
+  font-size: .7rem;
+  font-weight: 600;
+  letter-spacing: .04em;
+}
+
+.content {
+  flex: 1;
+  padding: 24px;
+  max-width: 600px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* ── ADD FORM ── */
+.section-label {
+  font-size: .7rem;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+.add-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 28px;
+}
+.add-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  flex-wrap: wrap;
+}
+.field {
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 11px 14px;
+  font-size: .9rem;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  outline: none;
+  transition: border-color .15s;
+}
+.field:focus { border-color: var(--brand); }
+.field::placeholder { color: var(--muted2); }
+.field-user { flex: 1; min-width: 130px; }
+.field-pin { width: 76px; text-align: center; letter-spacing: .2em; }
+.btn-create {
+  all: unset;
+  background: var(--brand);
+  color: #0a0f0e;
+  border-radius: 10px;
+  padding: 11px 18px;
+  font-size: .88rem;
+  font-weight: 700;
+  font-family: 'Bricolage Grotesque', sans-serif;
+  cursor: pointer;
+  white-space: nowrap;
+  touch-action: manipulation;
+  transition: opacity .15s;
+}
+.btn-create:hover { opacity: .88; }
+.btn-create:active { transform: scale(.97); }
+.add-msg {
+  font-size: .75rem;
+  margin-top: 10px;
+  min-height: 16px;
+}
+.add-msg.error { color: var(--danger); }
+.add-msg.success { color: var(--success); }
+.add-msg.loading { color: var(--muted); }
+
+/* ── USER LIST ── */
+#user-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.user-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  gap: 10px;
+  transition: border-color .15s;
+}
+.user-row:hover { border-color: var(--border2); }
+.user-info { flex: 1; min-width: 0; }
+.user-name {
+  font-weight: 600;
+  font-size: .95rem;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  margin-bottom: 3px;
+}
+.user-name.inactive { color: var(--muted); }
+.user-meta { font-size: .72rem; color: var(--muted); }
+.status-active { color: var(--success); }
+.status-inactive { color: var(--danger); }
+.user-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.btn-action {
+  all: unset;
+  border-radius: 8px;
+  padding: 6px 11px;
+  font-size: .75rem;
+  font-weight: 600;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: opacity .12s;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+}
+.btn-action:hover { opacity: .75; }
+.btn-toggle {
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  color: var(--muted);
+}
+.btn-remove {
+  background: rgba(238,83,80,.1);
+  border: 1px solid rgba(238,83,80,.2);
+  color: var(--danger);
+}
+.empty-state {
+  text-align: center;
+  color: var(--muted);
+  font-size: .85rem;
+  padding: 24px 0;
+}
+.loading-state {
+  text-align: center;
+  color: var(--muted);
+  font-size: .82rem;
+  padding: 20px 0;
+}
+</style>
+</head>
+<body>
+
+<!-- ══ PIN SCREEN ════════════════════════════════════════════════ -->
+<div id="pin-screen">
+  <div class="pin-wrap">
+    <div class="logo">
+      <div class="logo-mark">
+        <svg viewBox="0 0 18 18" fill="none"><path d="M9 3v6l3.5 2" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="9" cy="9" r="6.5" stroke="white" stroke-width="1.5"/></svg>
+      </div>
+      <span class="logo-name">Tô<span>Contando</span></span>
+    </div>
+    <div class="pin-card">
+      <h2>Área Restrita</h2>
+      <p>Digite o PIN de administrador para continuar</p>
+      <div class="dots">
+        <div class="dot" id="d0"></div>
+        <div class="dot" id="d1"></div>
+        <div class="dot" id="d2"></div>
+        <div class="dot" id="d3"></div>
+      </div>
+      <div class="numpad">
+        <button class="key" onclick="kp('1')">1</button>
+        <button class="key" onclick="kp('2')">2</button>
+        <button class="key" onclick="kp('3')">3</button>
+        <button class="key" onclick="kp('4')">4</button>
+        <button class="key" onclick="kp('5')">5</button>
+        <button class="key" onclick="kp('6')">6</button>
+        <button class="key" onclick="kp('7')">7</button>
+        <button class="key" onclick="kp('8')">8</button>
+        <button class="key" onclick="kp('9')">9</button>
+        <button class="key zero" onclick="kp('0')">0</button>
+        <button class="key del" onclick="kd()">⌫</button>
+      </div>
+      <div class="pin-error" id="pin-error"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ ADMIN SCREEN ═══════════════════════════════════════════════ -->
+<div id="admin-screen">
+  <div class="topbar">
+    <div class="topbar-logo">
+      <div class="logo-mark">
+        <svg viewBox="0 0 18 18" fill="none"><path d="M9 3v6l3.5 2" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="9" cy="9" r="6.5" stroke="white" stroke-width="1.5"/></svg>
+      </div>
+      <span class="topbar-name">Tô<span>Contando</span></span>
+    </div>
+    <span class="badge">ADMIN</span>
+  </div>
+
+  <div class="content">
+    <div class="section-label" style="margin-bottom:12px;">Novo Usuário</div>
+    <div class="add-card">
+      <div class="add-row">
+        <input id="f-user" class="field field-user" type="text"
+          placeholder="nome do usuário" autocapitalize="none" autocorrect="off" spellcheck="false">
+        <input id="f-pin" class="field field-pin" type="text"
+          placeholder="PIN" maxlength="4" pattern="[0-9]*" inputmode="numeric">
+        <button class="btn-create" onclick="criarUsuario()">+ Criar</button>
+      </div>
+      <div class="add-msg" id="add-msg"></div>
+    </div>
+
+    <div class="section-label">Usuários cadastrados</div>
+    <div id="user-list">
+      <div class="loading-state">Carregando...</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── PIN ──────────────────────────────────────────────────────────
+let _pin = '';
+
+function kp(d){
+  if(_pin.length >= 4) return;
+  _pin += d;
+  _renderDots();
+  if(_pin.length === 4) setTimeout(_checkPin, 180);
+}
+function kd(){
+  _pin = _pin.slice(0,-1);
+  _renderDots();
+  document.getElementById('pin-error').textContent = '';
+}
+function _renderDots(){
+  for(let i=0;i<4;i++){
+    const el = document.getElementById('d'+i);
+    if(el) el.classList.toggle('filled', i < _pin.length);
+  }
+}
+function _checkPin(){
+  if(_pin !== ADMIN_PIN){
+    document.getElementById('pin-error').textContent = 'PIN incorreto.';
+    _pin = ''; _renderDots();
+    return;
+  }
+  document.getElementById('pin-screen').style.display = 'none';
+  document.getElementById('admin-screen').classList.add('visible');
+  carregarUsuarios();
+}
+
+// ── USERS ────────────────────────────────────────────────────────
+async function carregarUsuarios(){
+  const list = document.getElementById('user-list');
+  list.innerHTML = '<div class="loading-state">Carregando...</div>';
+
+  let users = {};
+  try {
+    const snap = await db.ref('_admin/users').once('value');
+    users = snap.val() || {};
+  } catch(e){
+    list.innerHTML = '<div class="loading-state" style="color:var(--danger)">Erro ao carregar usuários.<br>Verifique as regras do Firebase.</div>';
+    return;
+  }
+
+  const entries = Object.entries(users).sort((a,b) => a[0].localeCompare(b[0]));
+
+  if(!entries.length){
+    list.innerHTML = '<div class="empty-state">Nenhum usuário cadastrado ainda.</div>';
+    return;
+  }
+
+  list.innerHTML = '';
+  for(const [uname, data] of entries){
+    const ativo = data.ativo !== false;
+    const row = document.createElement('div');
+    row.className = 'user-row';
+    row.id = 'row-' + uname;
+    row.innerHTML = `
+      <div class="user-info">
+        <div class="user-name ${ativo?'':'inactive'}">${uname}</div>
+        <div class="user-meta">
+          PIN: <strong>${data.pin}</strong> &nbsp;·&nbsp;
+          ${ativo
+            ? '<span class="status-active">● Ativo</span>'
+            : '<span class="status-inactive">● Inativo</span>'}
+          ${data.criadoEm ? ' &nbsp;·&nbsp; criado em ' + _fmtDate(data.criadoEm) : ''}
+        </div>
+      </div>
+      <div class="user-actions">
+        <button class="btn-action btn-toggle" onclick="toggleUsuario('${uname}', ${!ativo})">
+          ${ativo ? 'Pausar' : 'Ativar'}
+        </button>
+        <button class="btn-action btn-remove" onclick="removerUsuario('${uname}')">
+          Remover
+        </button>
+      </div>`;
+    list.appendChild(row);
+  }
+}
+
+function _fmtDate(ts){
+  const d = new Date(ts);
+  return d.toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit', year:'numeric'});
+}
+
+async function criarUsuario(){
+  const userIn = document.getElementById('f-user');
+  const pinIn  = document.getElementById('f-pin');
+  const msg    = document.getElementById('add-msg');
+
+  const uname = userIn.value.trim().toLowerCase();
+  const pin   = pinIn.value.trim();
+
+  msg.className = 'add-msg';
+
+  if(!uname){
+    msg.className = 'add-msg error';
+    msg.textContent = 'Digite um nome de usuário.';
+    return;
+  }
+  if(uname.includes(' ')){
+    msg.className = 'add-msg error';
+    msg.textContent = 'Usuário não pode ter espaços.';
+    return;
+  }
+  if(!/^\d{4}$/.test(pin)){
+    msg.className = 'add-msg error';
+    msg.textContent = 'O PIN deve ter exatamente 4 dígitos numéricos.';
+    return;
+  }
+
+  // Verifica se já existe
+  try {
+    const snap = await db.ref('_admin/users/' + uname).once('value');
+    if(snap.val()){
+      msg.className = 'add-msg error';
+      msg.textContent = 'Esse usuário já existe. Escolha outro nome.';
+      return;
+    }
+  } catch(e){}
+
+  msg.className = 'add-msg loading';
+  msg.textContent = 'Criando usuário...';
+
+  try {
+    // 1. Cria o registro no admin
+    await db.ref('_admin/users/' + uname).set({
+      pin,
+      ativo: true,
+      criadoEm: Date.now()
+    });
+
+    // 2. Apaga qualquer dado anterior nesse namespace (garante planilha zerada)
+    await db.ref('usuarios/' + uname + pin).remove();
+
+    userIn.value = '';
+    pinIn.value  = '';
+    msg.className = 'add-msg success';
+    msg.textContent = '✓ Usuário "' + uname + '" criado com sucesso!';
+    setTimeout(() => { msg.textContent = ''; }, 3000);
+
+    carregarUsuarios();
+  } catch(e){
+    msg.className = 'add-msg error';
+    msg.textContent = 'Erro ao salvar no Firebase. Verifique as regras de segurança do banco.';
+    console.error(e);
+  }
+}
+
+async function toggleUsuario(uname, novoStatus){
+  try {
+    await db.ref('_admin/users/' + uname + '/ativo').set(novoStatus);
+    carregarUsuarios();
+  } catch(e){
+    alert('Erro ao atualizar usuário.');
+  }
+}
+
+async function removerUsuario(uname){
+  if(!confirm('Remover o usuário "' + uname + '"?\n\nOs dados financeiros dele continuarão salvos no Firebase e poderão ser recuperados se você recriar o mesmo usuário + PIN.')) return;
+  try {
+    await db.ref('_admin/users/' + uname).remove();
+    carregarUsuarios();
+  } catch(e){
+    alert('Erro ao remover usuário.');
+  }
+}
+</script>
+</body>
+</html>

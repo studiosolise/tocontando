@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gerador de Ícones — TôContando</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:#0e0f13;color:#eceef3;font-family:'Segoe UI',sans-serif;
+  min-height:100vh;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:32px;padding:32px 24px;}
+h1{font-size:1.4rem;font-weight:700;color:#0cb8a4;letter-spacing:-.02em;}
+p{font-size:.85rem;color:#6b7280;text-align:center;line-height:1.6;max-width:440px;}
+code{color:#0cb8a4;background:rgba(12,184,164,.1);padding:2px 6px;border-radius:4px;}
+.previews{display:flex;gap:24px;align-items:flex-end;flex-wrap:wrap;justify-content:center;}
+.preview{display:flex;flex-direction:column;align-items:center;gap:8px;}
+.preview span{font-size:.72rem;color:#6b7280;}
+canvas{border-radius:22%;box-shadow:0 4px 20px rgba(0,0,0,.5);}
+.btn{background:#0cb8a4;color:#0a0f0e;border:none;border-radius:12px;
+  padding:14px 32px;font-size:1rem;font-weight:700;cursor:pointer;
+  transition:opacity .15s;letter-spacing:-.01em;}
+.btn:hover{opacity:.85;}
+.btn:active{transform:scale(.97);}
+.note{font-size:.78rem;color:#4b5263;text-align:center;max-width:400px;line-height:1.6;}
+</style>
+</head>
+<body>
+
+<h1>Gerador de Ícones — TôContando</h1>
+
+<div class="previews">
+  <div class="preview">
+    <canvas id="c180" width="180" height="180"></canvas>
+    <span>180×180 — iOS</span>
+  </div>
+  <div class="preview">
+    <canvas id="c192" width="192" height="192"></canvas>
+    <span>192×192 — Android</span>
+  </div>
+  <div class="preview">
+    <canvas id="c512" width="512" height="512"></canvas>
+    <span>512×512 — Splash</span>
+  </div>
+</div>
+
+<button class="btn" onclick="downloadAll()">⬇ Baixar os 3 ícones PNG</button>
+
+<p>
+  Após clicar, 3 arquivos serão baixados automaticamente.<br>
+  Crie a pasta <code>icons/</code> na raiz do projeto e mova os 3 arquivos para dentro.
+</p>
+
+<p class="note">
+  Este arquivo pode ser deletado após gerar os ícones — ele não faz parte do app.
+</p>
+
+<script>
+function drawIcon(size) {
+  const canvas = document.getElementById('c' + size)
+    || Object.assign(document.createElement('canvas'), {width: size, height: size});
+  const ctx = canvas.getContext('2d');
+  const cx = size / 2;
+  const cy = size / 2;
+
+  // Fundo teal sólido
+  ctx.fillStyle = '#0cb8a4';
+  ctx.fillRect(0, 0, size, size);
+
+  // Círculo do relógio
+  const r   = size * 0.295;
+  const lw  = size * 0.058;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.strokeStyle = 'white';
+  ctx.lineWidth   = lw;
+  ctx.stroke();
+
+  // Ponteiro vertical (12 → centro)
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - r * 0.62);
+  ctx.lineTo(cx, cy);
+  ctx.strokeStyle  = 'white';
+  ctx.lineWidth    = lw * 0.88;
+  ctx.lineCap      = 'round';
+  ctx.stroke();
+
+  // Ponteiro diagonal (centro → ~4h)
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(cx + r * 0.5, cy + r * 0.3);
+  ctx.strokeStyle = 'white';
+  ctx.lineWidth   = lw * 0.88;
+  ctx.lineCap     = 'round';
+  ctx.stroke();
+
+  return canvas;
+}
+
+function drawAll() {
+  [180, 192, 512].forEach(s => drawIcon(s));
+}
+
+async function downloadAll() {
+  const btn = document.querySelector('.btn');
+  btn.textContent = 'Baixando...';
+  btn.disabled = true;
+
+  for (const size of [180, 192, 512]) {
+    const canvas = drawIcon(size);
+    await new Promise(resolve => {
+      canvas.toBlob(blob => {
+        const a = document.createElement('a');
+        a.download = 'icon-' + size + '.png';
+        a.href = URL.createObjectURL(blob);
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(resolve, 400);
+      }, 'image/png');
+    });
+  }
+
+  btn.textContent = '✓ Baixados! Mova para a pasta icons/';
+  btn.style.background = '#34d399';
+}
+
+drawAll();
+</script>
+</body>
+</html>
