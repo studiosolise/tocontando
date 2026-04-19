@@ -1182,21 +1182,7 @@ const DEFAULT_ORIGENS=[
 const DEFAULT_ITEMS_MAR=[];
 const DEFAULT_ENTRADAS_MAR=[];
 
-// ── DESPESAS FIXAS que se repetem todo mês ───────────────────────
-// Luz e Água variam — usamos médias baseadas no histórico
-// Faculdade: valor normal sem juros ~R$289 (março teve juros)
-// Empréstimo Infinit: R$200 fixo
-const FIXOS_MENSAIS = [
-  {desc:'Fies',              cat:'Despesa Fixa', fonte:'Débito',    valor:16.53,  dia:'01', obs:'Débito automático Caixa'},
-  {desc:'Marli Faxina',      cat:'Despesa Fixa', fonte:'PIX',       valor:240.00, dia:'10', obs:''},
-  {desc:'Luz',               cat:'Despesa Fixa', fonte:'A definir', valor:120.00, dia:'11', obs:'Média estimada — atualizar ao receber conta'},
-  {desc:'Água',              cat:'Despesa Fixa', fonte:'A definir', valor:85.00,  dia:'15', obs:'Média estimada — atualizar ao receber conta'},
-  {desc:'Aluguel',           cat:'Despesa Fixa', fonte:'PIX',       valor:700.00, dia:'17', obs:''},
-  {desc:'Empréstimo Infinit',cat:'Empréstimos',  fonte:'PIX',       valor:200.00, dia:'17', obs:''},
-  {desc:'Academia',          cat:'Saúde',        fonte:'PIX',       valor:85.00,  dia:'23', obs:''},
-  {desc:'Faculdade',         cat:'Educação',     fonte:'PIX',       valor:289.00, dia:'25', obs:'Valor mensal normal'},
-  {desc:'Internet',          cat:'Despesa Fixa', fonte:'A definir', valor:119.00, dia:'30', obs:''},
-];
+const FIXOS_MENSAIS = [];
 
 // ── GERADOR DE DADOS POR MÊS ─────────────────────────────────────
 // Gera os itens default para qualquer mês com base nos fixos mensais
@@ -3572,8 +3558,6 @@ function zerarTudo(){
       db.ref(window._FB_ROOT + '/snaps/' + m.key).remove();
     }
   });
-  // Limpa os itens fixos recorrentes para que os meses abram vazios
-  FIXOS_MENSAIS.length = 0;
   // Recarrega a capa
   items=[]; entradas=[]; investimentos=[]; nextId=200;
   fontes=JSON.parse(JSON.stringify(DEFAULT_FONTES));
