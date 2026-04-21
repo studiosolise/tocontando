@@ -1,0 +1,11 @@
+{
+  "cleanUrls": false,
+  "redirects": [
+    {
+      "source": "/",
+      "has": [{ "type": "host", "value": "adm.tocontando.app" }],
+      "destination": "/admin.html",
+      "permanent": false
+    }
+  ]
+}
